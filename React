@@ -1,0 +1,221 @@
+#include "react.h"
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef struct reactor Reactor;
+typedef struct cell Cell;
+typedef struct listener Listener;
+typedef struct callback Callback;
+struct reactor {
+  Cell *last;
+};
+typedef enum {
+  CELL_TYPE_INPUT,
+  CELL_TYPE_COMPUTE1,
+  CELL_TYPE_COMPUTE2
+} CellType;
+struct callback {
+  callback_id id;
+  callback func;
+  void *arg;
+  Callback *next;
+};
+struct cell {
+  CellType type;
+  int value;
+  union {
+    struct {
+      compute1 func;
+      Cell *arg;
+    } one;
+    struct {
+      compute2 func;
+      Cell *arg1;
+      Cell *arg2;
+    } two;
+  } compute;
+  Listener *listeners;
+  Callback *callbacks;
+  Cell *prev;
+  bool stale;
+};
+struct listener {
+  Cell *cell;
+  Listener *next;
+};
+struct reactor *create_reactor() {
+  return calloc(1, sizeof(Reactor));
+}
+static void free_cell(Cell *c) {
+  Listener *l = c->listeners;
+  while (l != NULL) {
+    Listener *t = l;
+    l = l->next;
+    free(t);
+  }
+  Callback *cb = c->callbacks;
+  while (cb != NULL) {
+    Callback *t = cb;
+    cb = cb->next;
+    free(t);
+  }
+  free(c);
+}
+void destroy_reactor(struct reactor *r) {
+  while (r->last != NULL) {
+    Cell *c = r->last;
+    r->last = c->prev;
+    free_cell(c);
+  }
+  free(r);
+}
+struct cell *create_input_cell(struct reactor *r, int initial_value) {
+  Cell *c = malloc(sizeof(Cell));
+  c->type = CELL_TYPE_INPUT;
+  c->value = initial_value;
+  c->listeners = NULL;
+  c->callbacks = NULL;
+  c->stale = false;
+  c->prev = r->last;
+  r->last = c;
+  return c;
+}
+static void exec_callback(Cell *c) {
+  Callback *scb = c->callbacks;
+  while (scb != NULL) {
+    scb->func(scb->arg, c->value);
+    scb = scb->next;
+  }
+}
+static void update_compute_cell(Cell *c) {
+  int new_value;
+  if (c->type == CELL_TYPE_COMPUTE1) {
+    if (c->compute.one.arg->stale) {
+      return;
+    }
+    new_value = c->compute.one.func(c->compute.one.arg->value);
+  } else if (c->type == CELL_TYPE_COMPUTE2) {
+    if (c->compute.two.arg2->stale || c->compute.two.arg2->stale) {
+      return;
+    }
+    new_value = c->compute.two.func(c->compute.two.arg1->value,
+                                    c->compute.two.arg2->value);
+  }
+  c->stale = false;
+  if (c->value == new_value) {
+    return;
+  }
+  set_cell_value(c, new_value);
+  exec_callback(c);
+}
+static void stale(Cell *c) {
+  Listener *listener = c->listeners;
+  while (listener != NULL) {
+    listener->cell->stale = true;
+    stale(listener->cell);
+    listener = listener->next;
+  }
+}
+static void notify_listeners(Cell *c) {
+  Listener *listener = c->listeners;
+  stale(c);
+  listener = c->listeners;
+  while (listener != NULL) {
+    update_compute_cell(listener->cell);
+    listener = listener->next;
+  }
+}
+static void add_listener(Cell *cell, Cell *dest) {
+  Listener *l = malloc(sizeof(Listener));
+  l->cell = cell;
+  l->next = NULL;
+  if (dest->listeners == NULL) {
+    dest->listeners = l;
+    return;
+  }
+  Listener *last = dest->listeners;
+  while (last->next != NULL) {
+    last = last->next;
+  }
+  last->next = l;
+}
+struct cell *create_compute1_cell(struct reactor *r, struct cell *input,
+                                  compute1 func) {
+  Cell *c = malloc(sizeof(Cell));
+  c->type = CELL_TYPE_COMPUTE1;
+  c->listeners = NULL;
+  c->callbacks = NULL;
+  c->compute.one.arg = input;
+  c->compute.one.func = func;
+  c->prev = r->last;
+  r->last = c;
+  add_listener(c, input);
+  c->value = func(input->value);
+  c->stale = false;
+  return c;
+}
+struct cell *create_compute2_cell(struct reactor *r, struct cell *input1,
+                                  struct cell *input2, compute2 func) {
+  Cell *c = malloc(sizeof(Cell));
+  c->type = CELL_TYPE_COMPUTE2;
+  c->listeners = NULL;
+  c->callbacks = NULL;
+  c->compute.two.arg1 = input1;
+  c->compute.two.arg2 = input2;
+  c->compute.two.func = func;
+  c->prev = r->last;
+  r->last = c;
+  add_listener(c, input1);
+  add_listener(c, input2);
+  c->callbacks = NULL;
+  c->value = func(input1->value, input2->value);
+  c->stale = false;
+  return c;
+}
+int get_cell_value(struct cell *c) { return c->value; }
+void set_cell_value(struct cell *c, int new_value) {
+  c->value = new_value;
+  notify_listeners(c);
+}
+callback_id add_callback(struct cell *c, void *arg, callback cb) {
+  Callback *newcb = malloc(sizeof(Callback));
+  newcb->func = cb;
+  newcb->arg = arg;
+  newcb->next = NULL;
+  if (c->callbacks == NULL) {
+    newcb->id = 1;
+    c->callbacks = newcb;
+    return 1;
+  }
+  Callback *scb = c->callbacks;
+  while (scb->next != NULL) {
+    scb = scb->next;
+  }
+  newcb->id = scb->id + 1;
+  scb->next = newcb;
+  return newcb->id;
+}
+void remove_callback(struct cell *c, callback_id id) {
+  if (c->callbacks == NULL) {
+    return;
+  }
+  Callback *cur = c->callbacks;
+  if (cur->id == id) {
+    c->callbacks = cur->next;
+    free(cur);
+    return;
+  }
+  while (cur != NULL) {
+    if (cur->next == NULL) {
+      break;
+    }
+    if (cur->next->id != id) {
+      cur = cur->next;
+      continue;
+    }
+    Callback *t = cur->next;
+    cur->next = cur->next->next;
+    free(t);
+    break;
+  }
+}
