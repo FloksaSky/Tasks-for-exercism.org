@@ -1,0 +1,26 @@
+#include "grains.h"
+// ipow returns base^exp
+uint64_t ipow(uint64_t base, uint64_t exp) {
+    uint64_t result = 1;
+    for (;;)
+    {
+        if (exp & 1)
+            result *= base;
+        exp >>= 1;
+        if (!exp)
+            break;
+        base *= base;
+    }
+    return result;
+}
+// square returns the number of grains on indexed square
+uint64_t square(uint8_t index) {
+    if (index < 1 || index > 64) {
+        return (uint64_t)0;
+    }
+    return ipow(2, index-1);
+}
+// total returns the total number of grains on a chess board
+uint64_t total(void) {
+    return ipow(2, 64) - 1;
+}
