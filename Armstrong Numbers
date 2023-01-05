@@ -1,0 +1,57 @@
+#include "armstrong_numbers.h"
+//#include <stdio.h>
+//For this exercise we will divide our solution into many functions. We need to first declare the functions we need to accomplish our goal:
+// 1) A power function which returns base^exponent when two integers base and exponent are given as input.
+int power (int base, int exponent);
+// 2) A function which returns the number of digits of a given integer input
+int countDigits(int candidate);
+// 3) A function which accepts an integer as input and returns the sum of each digit raised to the power of the number of digits. For example when the input is the number 235, the function returns 2^3+3^3+5^3=8+27+125=160.
+int findDigitRaisedSum(int candidate);
+// 4) The actual is_armstrong_number function which returns 1 if the integer input is equal to the output of function findDigitRaisedSum, 0 otherwise. (Its declaration is in the header file)
+bool is_armstrong_number(int candidate){
+//This is the main function that exercism will use to conduct its test so we retun our final result (0 or 1) depending on the candidate number at the end of this function
+    //For a moment let's just assume that the function 3 exists and accomplishes the task it's supposed to do. We can define how the function findDigitRaisedSum works later in the file. It's enough that it was declared at the top. 
+if (findDigitRaisedSum(candidate)==candidate){
+//the line above calls the function findDigitRaisedSum with the candidate as its argument. Thus, if the return value is as the name of the function suggests, all we have to do is to compare it with the value of the variable candidate.
+    return 1;
+    
+}
+    return 0;
+}
+int findDigitRaisedSum(int candidate){
+   //Now in this definition we have to back up our claim above: we need to compute the sum of all digits of the input number raised to the power of the number of digits
+    int sum=0;// We will initialise the sum at value 0 and we add each digit raised to the number of digits one by one. 
+    int dig; // We will keep the current digit we're working with in this variable. 
+   
+    const int numOfDigits=countDigits(candidate); //Again here we assume that we have a function called countDigits that counts the digits of any given input. Just like we define this very function after we already use it, we can define countDigits after using it since it is already declared at the top. We store its return value to a variable so that we do not call the function every time we use the number of digits.
+    
+    while (candidate > 0){//In this loop we will :
+    dig=candidate % 10; //1)Find out the rightmost digit of the current value of the candidate
+    sum = sum + power (dig, numOfDigits);// 2)Raise it to the power of the number of digits and add it to sum. We will define the power function later.
+    candidate = candidate / 10; //3)update the current value of the candidate by removing the rightmost digit
+    
+    }//The loop terminates after we remove all digits from the candidate,i.e., when candidate==0
+    return sum;
+    //Since each digit is raised to the power of numOfdigits and added to the sum we can now return it
+}
+int countDigits(int candidate){
+    //We count the digits by removing them. 
+    int numOfDigits=1;//We initialise this variable at value 1 since all integers have at least one digit. We will use it as a counter in a loop that removes a digit from the candidate at every iteration.
+    while (candidate >= 10){//Unlike the previous function we stop the iteration when candidate is smaller than 10, i.e. which implies it has a single digit left
+    candidate = candidate /  10;//We remove the digit by long division, remember: 153/10 gives 15
+    numOfDigits=numOfDigits + 1; 
+    }
+    return numOfDigits;
+}
+//The last function we will define is the first we have declared. A function which takes a given integer power of another integer
+int power (int base, int exponent){
+int product=1;//This is a straightforward implementation of  exponentiation we will start 
+    //an initial value of 1 and multiply this variable with the base, exponent time
+    for (int i =0; i < exponent; i++){//this for loop repeats exponent time
+        product= product*base;//in each iteration we update the value of the variable product by multiplying it with the base.
+        
+    }
+    
+return product; 
+    
+}
